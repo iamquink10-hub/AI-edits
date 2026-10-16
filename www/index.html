@@ -65,6 +65,10 @@
 
   <button class="btn primary" id="go" onclick="generate()">✨ Generate edit</button>
   <pre id="out"></pre>
+   <button class="btn primary" id="render" style="background:#00a86b" onclick="renderEdit()">🎞️ Render video</button>
+  <pre id="rstatus"></pre>
+  <video id="preview" controls playsinline style="width:100%;margin-top:10px;border-radius:12px;display:none"></video>
+  <script src="editor.js"></script>
 
 <script>
   const MODEL = "gemini-flash-latest";
