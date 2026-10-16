@@ -57,12 +57,15 @@ function drawCaption(ctx, W, H, text) {
   lines.forEach(l => { ctx.strokeText(l, W / 2, y); ctx.fillText(l, W / 2, y); y += fs * 1.2; });
 }
 
-function blobToBase64(blob) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result).split(',')[1]);
-    r.onerror = () => rej(new Error('Could not read video'));
-    r.readAsDataURL(blob);
+async function blobToBase64(blob) {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  const step = 0x8000;
+  for (let i = 0; i < buf.length; i += step) {
+    bin += String.fromCharCode.apply(null, buf.subarray(i, i + step));
+  }
+  return btoa(bin);
+}
   });
 }
 
