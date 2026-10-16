@@ -172,4 +172,63 @@
       const clipInfo = [];
 
       for (let i = 0; i < clips.length; i++) {
-        out.textContent = '⬆️ Uploading clip ' + (i + 1) + ' of '
+                out.textContent = '⬆️ Uploading clip ' + (i + 1) + ' of ' + clips.length + '...\n(bigger clips take longer)';
+        const dur = await getDuration(clips[i]);
+        clipInfo.push({ index: i, name: clips[i].name, durationSeconds: dur });
+        const f = await uploadFile(clips[i], key);
+        parts.push({ text: 'CLIP INDEX ' + i + ' (' + clips[i].name + ', ' + dur + ' seconds):' });
+        parts.push({ fileData: { mimeType: f.mimeType, fileUri: f.uri } });
+      }
+
+      if (ref) {
+        out.textContent = '⬆️ Uploading reference video...';
+        const f = await uploadFile(ref, key);
+        parts.push({ text: 'REFERENCE VIDEO (copy its pacing, cut length, and style, do not include it in the edit):' });
+        parts.push({ fileData: { mimeType: f.mimeType, fileUri: f.uri } });
+      }
+
+      const instruction =
+`You are a professional video editor. Watch and listen to the clips above and create an edit plan.
+
+User request: ${document.getElementById('prompt').value || '(none, make it look good)'}
+Focus on: ${Array.from(focus).join(', ') || 'nothing specific'}
+
+Rules:
+- All times are numbers in SECONDS (example 12.5), never MM:SS.
+- Segments must be real moments you actually saw/heard, inside each clip's duration.
+- If the user wants only speech parts, cut out silence and non-speech.
+- Captions must have accurate timing relative to the ORIGINAL clip (clip index + start/end in that clip). Translate to the language the user asked for, otherwise use the spoken language.
+- If a reference video is given, match its average cut length and pacing.
+
+Reply ONLY with JSON in this shape:
+{"style":"short description",
+ "detectedLanguage":"...",
+ "segments":[{"clip":0,"start":0.0,"end":3.0,"speed":1,"zoom":false,"transition":"cut","reason":"why this part"}],
+ "captions":[{"clip":0,"start":0.0,"end":2.5,"text":"caption text"}],
+ "music":{"beatSync":false},
+ "colorGrade":"none",
+ "notes":"anything else"}`;
+      parts.push({ text: instruction });
+
+      out.textContent = '👀 Gemini is watching your clips...';
+      const r = await fetch(API + '/v1beta/models/' + MODEL + ':generateContent?key=' + key, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { responseMimeType: 'application/json' }
+        })
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error.message);
+      const text = data.candidates[0].content.parts[0].text;
+      try { lastPlan = JSON.parse(text); } catch(e) { lastPlan = null; }
+      out.textContent = '✅ Edit plan:\n' + (lastPlan ? JSON.stringify(lastPlan, null, 2) : text);
+    } catch (err) {
+      out.textContent = '❌ ' + err.message;
+    }
+    btn.disabled = false;
+  }
+</script>
+</body>
+</html>
