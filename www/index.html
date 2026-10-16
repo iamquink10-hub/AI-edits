@@ -13,20 +13,28 @@
   .btn { display:block; width:100%; padding:14px; border:none; border-radius:12px;
          background:#2a2a2e; color:#fff; font-size:15px; text-align:center; }
   .primary { background:#7c4dff; font-weight:bold; font-size:17px; margin-top:6px; }
-  textarea { width:100%; height:100px; background:#2a2a2e; color:#fff; border:none;
-             border-radius:12px; padding:12px; font-size:15px; resize:none; }
+  textarea, input[type=password] { width:100%; background:#2a2a2e; color:#fff; border:none;
+             border-radius:12px; padding:12px; font-size:15px; }
+  textarea { height:100px; resize:none; }
   .thumbs { display:flex; gap:8px; overflow-x:auto; margin-top:10px; }
   .thumbs video { width:90px; height:120px; object-fit:cover; border-radius:8px; background:#000; }
   .chips { display:flex; flex-wrap:wrap; gap:8px; }
   .chip { padding:8px 14px; border-radius:20px; background:#2a2a2e; font-size:14px; }
   .chip.on { background:#7c4dff; }
   .note { color:#888; font-size:12px; margin-top:6px; }
-  pre { white-space:pre-wrap; font-size:12px; color:#9f9; }
+  pre { white-space:pre-wrap; font-size:12px; color:#9f9; word-break:break-word; }
 </style>
 </head>
 <body>
   <h1>AI Editor 🎬</h1>
   <div class="sub">Add clips, describe your edit, get a result.</div>
+
+  <div class="card">
+    <h3>⚙️ Gemini API key</h3>
+    <input type="password" id="key" placeholder="Paste your key here">
+    <button class="btn" style="margin-top:8px" onclick="saveKey()">Save key</button>
+    <div class="note" id="keyNote">Saved only on this phone.</div>
+  </div>
 
   <div class="card">
     <h3>1. Your clips</h3>
@@ -54,12 +62,23 @@
     <div class="note">The AI will copy its pacing and style.</div>
   </div>
 
-  <button class="btn primary" onclick="generate()">✨ Generate edit</button>
+  <button class="btn primary" id="go" onclick="generate()">✨ Generate edit</button>
   <pre id="out"></pre>
 
 <script>
+  const MODEL = "gemini-flash-latest";
   let clips = [], ref = null, focus = new Set();
 
+  // ---- key storage ----
+  try { document.getElementById('key').value = localStorage.getItem('gkey') || ''; } catch(e){}
+  function saveKey() {
+    try {
+      localStorage.setItem('gkey', document.getElementById('key').value.trim());
+      document.getElementById('keyNote').textContent = '✅ Key saved on this phone.';
+    } catch(e) { document.getElementById('keyNote').textContent = 'Could not save key.'; }
+  }
+
+  // ---- focus chips ----
   const options = ["Captions","Beat sync","Fast cuts","Slow motion","Zoom effects","Transitions","Color grade","Remove silence"];
   const chipsEl = document.getElementById('chips');
   options.forEach(o => {
@@ -94,16 +113,68 @@
     if (ref) addThumb(box, ref);
   };
 
-  function generate() {
+  function getDuration(file) {
+    return new Promise(res => {
+      const v = document.createElement('video');
+      v.preload = 'metadata';
+      v.onloadedmetadata = () => res(Math.round(v.duration * 10) / 10);
+      v.onerror = () => res(null);
+      v.src = URL.createObjectURL(file);
+    });
+  }
+
+  async function generate() {
     const out = document.getElementById('out');
+    const btn = document.getElementById('go');
+    const key = document.getElementById('key').value.trim();
+    if (!key) { out.textContent = '⚠️ Paste and save your Gemini key first.'; return; }
     if (clips.length === 0) { out.textContent = '⚠️ Add at least one clip first.'; return; }
-    const request = {
-      clips: clips.map(f => f.name),
-      prompt: document.getElementById('prompt').value,
-      focus: Array.from(focus),
-      reference: ref ? ref.name : null
-    };
-    out.textContent = 'Request ready (AI connects in Step 3):\n' + JSON.stringify(request, null, 2);
+
+    btn.disabled = true;
+    out.textContent = '⏳ Reading clips...';
+    try {
+      const clipInfo = [];
+      for (let i = 0; i < clips.length; i++) {
+        clipInfo.push({ index: i, name: clips[i].name, durationSeconds: await getDuration(clips[i]) });
+      }
+      const refInfo = ref ? { name: ref.name, durationSeconds: await getDuration(ref) } : null;
+
+      const instruction =
+`You are a professional video editor. Create an edit plan.
+Clips: ${JSON.stringify(clipInfo)}
+User request: ${document.getElementById('prompt').value}
+Focus on: ${Array.from(focus).join(', ') || 'nothing specific'}
+Reference video: ${refInfo ? JSON.stringify(refInfo) : 'none'}
+
+Reply ONLY with JSON in this shape:
+{"style":"short description",
+ "segments":[{"clip":0,"start":0,"end":3,"speed":1,"zoom":false,"transition":"cut"}],
+ "captions":{"enabled":true,"language":"English","style":"bold white bottom"},
+ "music":{"beatSync":false},
+ "colorGrade":"none",
+ "notes":"anything that needs speech detection or other analysis"}
+Keep start/end within each clip's duration.`;
+
+      out.textContent = '🤖 Asking Gemini...';
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent?key=' + key;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: instruction }] }],
+          generationConfig: { responseMimeType: 'application/json' }
+        })
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error.message);
+      const text = data.candidates[0].content.parts[0].text;
+      let plan;
+      try { plan = JSON.parse(text); } catch(e) { plan = text; }
+      out.textContent = '✅ Edit plan:\n' + (typeof plan === 'string' ? plan : JSON.stringify(plan, null, 2));
+    } catch (err) {
+      out.textContent = '❌ ' + err.message;
+    }
+    btn.disabled = false;
   }
 </script>
 </body>
