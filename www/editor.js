@@ -66,8 +66,6 @@ async function blobToBase64(blob) {
   }
   return btoa(bin);
 }
-  });
-}
 
 async function saveVideo() {
   const st = document.getElementById('rstatus');
