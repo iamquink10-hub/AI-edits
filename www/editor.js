@@ -174,3 +174,6 @@ async function renderEdit() {
   }
   btn.disabled = false;
 }
+document.getElementById('go').addEventListener('click', function () {
+  document.getElementById('render').disabled = false;
+});
