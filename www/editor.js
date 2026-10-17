@@ -57,7 +57,7 @@ function drawCaption(ctx, W, H, text) {
   lines.forEach(l => { ctx.strokeText(l, W / 2, y); ctx.fillText(l, W / 2, y); y += fs * 1.2; });
 }
 
-async function blobToBase64(blob) {
+asnc function blobToBase64(blob) {
   const buf = new Uint8Array(await blob.arrayBuffer());
   let bin = '';
   const step = 0x8000;
